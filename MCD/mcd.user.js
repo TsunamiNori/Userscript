@@ -2,13 +2,17 @@
 // @name            MCD
 // @namespace       https://lelinhtinh.github.io
 // @description     Manga Comic Downloader. Shortcut: Alt+Y.
-// @version         1.1.0
+// @version         1.5.0
 // @icon            https://i.imgur.com/GAM6cCg.png
 // @author          Zzbaivong
 // @license         MIT; https://baivong.mit-license.org/license.txt
 // @match           https://www.kuaikanmanhua.com/*
+// @match           https://newtoki*.*/webtoon/*
+// @match           https://manhwa18.net/*
+// @match           https://manytoon.com/comic/*
+// @match           https://18comic.org/album/*
 // @require         https://code.jquery.com/jquery-3.5.1.min.js
-// @require         https://unpkg.com/jszip@3.4.0/dist/jszip.min.js
+// @require         https://unpkg.com/jszip@3.1.5/dist/jszip.min.js
 // @require         https://unpkg.com/file-saver@2.0.2/dist/FileSaver.min.js
 // @require         https://greasemonkey.github.io/gm4-polyfill/gm4-polyfill.js?v=a834d46
 // @noframes
@@ -70,11 +74,6 @@ jQuery(function ($) {
   /* === DO NOT CHANGE === */
 
   window.URL = window._URL;
-
-  // eslint-disable-next-line no-unused-vars
-  function isEmpty(el) {
-    return !$.trim(el.html());
-  }
 
   function getImageType(arrayBuffer) {
     if (!arrayBuffer.byteLength)
@@ -180,8 +179,15 @@ jQuery(function ($) {
     if (status !== 'warning' && status !== 'success') autoHide();
   }
 
+  function targetLink(selector) {
+    return configs.link
+      .split(/\s*,\s*/)
+      .map((i) => i + selector)
+      .join(',');
+  }
+
   function linkError() {
-    $(configs.link + '[href="' + configs.href + '"]').css({
+    $(targetLink('[href="' + configs.href + '"]')).css({
       color: 'red',
       textShadow: '0 0 1px red, 0 0 1px red, 0 0 1px red',
     });
@@ -189,7 +195,7 @@ jQuery(function ($) {
   }
 
   function linkSuccess() {
-    var $currLink = $(configs.link + '[href="' + configs.href + '"]');
+    var $currLink = $(targetLink('[href="' + configs.href + '"]'));
     if (!hasDownloadError)
       $currLink.css({
         color: 'green',
@@ -243,7 +249,7 @@ jQuery(function ($) {
       return configs.href.indexOf(l) === -1;
     });
 
-    $(configs.link + '[href="' + configs.href + '"]').css({
+    $(targetLink('[href="' + configs.href + '"]')).css({
       color: 'orange',
       fontWeight: 'bold',
       fontStyle: 'italic',
@@ -277,7 +283,7 @@ jQuery(function ($) {
             return _link.indexOf(l) === -1;
           });
 
-          $(configs.link + '[href="' + _link + '"]').css({
+          $(targetLink('[href="' + _link + '"]')).css({
             color: 'gray',
             fontWeight: 'bold',
             fontStyle: 'italic',
@@ -292,7 +298,7 @@ jQuery(function ($) {
 
           dlAll.push(_link);
 
-          $(configs.link + '[href="' + _link + '"]').css({
+          $(targetLink('[href="' + _link + '"]')).css({
             color: 'violet',
             textDecoration: 'overline',
             textShadow: '0 0 1px violet, 0 0 1px violet, 0 0 1px violet',
@@ -316,7 +322,7 @@ jQuery(function ($) {
     if (!inCustom && !dlAll.length) dlAllGen();
     if (!dlAll.length) return;
     inAuto = true;
-    $(configs.link + '[href*="' + dlAll[0] + '"]').trigger('contextmenu');
+    $(targetLink('[href*="' + dlAll[0] + '"]')).trigger('contextmenu');
   }
 
   function downloadAllOne() {
@@ -327,8 +333,8 @@ jQuery(function ($) {
   function genFileName() {
     chapName = chapName
       .replace(/\s+/g, '_')
-      .replace(/\./g, '-')
-      .replace(/(^[\W_]+|[\W_]+$)/, '');
+      .replace(/・/g, '·')
+      .replace(/(^_+|_+$)/, '');
     if (hasDownloadError) chapName = '__ERROR__' + chapName;
     return chapName;
   }
@@ -338,6 +344,7 @@ jQuery(function ($) {
       dlZip = new JSZip();
       dlPrevZip = false;
     }
+
     dlCurrent = 0;
     dlFinal = 0;
     dlTotal = 0;
@@ -348,7 +355,7 @@ jQuery(function ($) {
 
     if (inAuto) {
       if (dlAll.length) {
-        $(configs.link + '[href*="' + dlAll[0] + '"]').trigger('contextmenu');
+        $(targetLink('[href*="' + dlAll[0] + '"]')).trigger('contextmenu');
       } else {
         inAuto = false;
         inCustom = false;
@@ -426,7 +433,7 @@ jQuery(function ($) {
       headers.referer = referer[urlHost];
       headers.origin = referer[urlHost];
     } else {
-      headers.referer = configs.href;
+      headers.referer = location.origin;
       headers.origin = location.origin;
     }
 
@@ -446,7 +453,7 @@ jQuery(function ($) {
 
         if (
           !imgExt ||
-          response.response.byteLength < 300 ||
+          response.response.byteLength < 100 ||
           (response.statusText !== 'OK' && response.statusText !== '')
         ) {
           dlImgError(current, success, error, response, filename);
@@ -511,23 +518,9 @@ jQuery(function ($) {
   }
 
   function imageIgnore(url) {
-    return ignoreList.indexOf(url) !== -1;
-  }
-
-  function protocolUrl(url) {
-    if (url.indexOf('//') === 0) url = location.protocol + url;
-    if (url.search(/https?:\/\//) !== 0) url = 'http://' + url;
-    return url;
-  }
-
-  function redirectSSL(url) {
-    if (
-      url.search(/(i\.imgur\.com|\.blogspot\.com|\.fbcdn\.net|storage\.fshare\.vn)/i) !== -1 &&
-      url.indexOf('http://') === 0
-    )
-      url = url.replace(/^http:\/\//, 'https://');
-
-    return url;
+    return ignoreList.some(function (v) {
+      return url.indexOf(v) !== -1;
+    });
   }
 
   function decodeUrl(url) {
@@ -554,8 +547,6 @@ jQuery(function ($) {
       url = url.replace(/(\?|&).+/, '');
     }
     url = encodeURI(url);
-    url = protocolUrl(url);
-    url = redirectSSL(url);
 
     return url;
   }
@@ -567,6 +558,8 @@ jQuery(function ($) {
       notyImages();
     } else {
       $.each(images, function (i, v) {
+        v = v.replace(/^[\s\n]+|[\s\n]+$/g, '');
+
         var keep = keepOriginal.some(function (key) {
           return v.indexOf(key) !== -1;
         });
@@ -603,8 +596,8 @@ jQuery(function ($) {
     $contents.each(function (i, v) {
       var $img = $(v);
       images[i] = !configs.imgSrc
-        ? $img.data('cdn') || $img.data('src') || $img.data('original')
-        : $img.attr(configs.imgSrc);
+        ? $img.data('src') || $img.data('original')
+        : $img.attr(configs.imgSrc) || $img.attr('src');
     });
 
     checkImages(images);
@@ -678,6 +671,7 @@ jQuery(function ($) {
 
     $link.on('contextmenu', function (e) {
       e.preventDefault();
+      hasDownloadError = false;
       if (!oneProgress()) return;
 
       rightClickEvent(this, callback);
@@ -711,6 +705,49 @@ jQuery(function ($) {
         notyImages();
         return;
       }
+
+      checkImages(images);
+    });
+  }
+
+  /* global html_data */
+  function getNewToki69() {
+    function html_encoder(s) {
+      var i = 0,
+        out = '',
+        l = s.length;
+      for (; i < l; i += 3) {
+        out += String.fromCharCode(parseInt(s.substr(i, 2), 16));
+      }
+      return out;
+    }
+
+    getSource(function ($data) {
+      var $images = $data.find('img[data-original^="https://"]:not([style])');
+      if (!$images.length) {
+        $images = $data.find('script:not([src]):contains("html_data")');
+        if (!$images.length) {
+          notyImages();
+          return;
+        }
+
+        $images = $images.text();
+        $images = /(var\s+html_data[\s\S]+?)(?=(document\.write|[\s\n]+$))/.exec($images);
+        if (!$images) {
+          notyImages();
+          return;
+        }
+
+        eval($images[1]);
+        $images = html_encoder(html_data);
+        $images = $($images).find('img[data-original^="https://"]:not([style])');
+      }
+
+      var images = [];
+      $images.each(function (i, v) {
+        var $img = $(v);
+        images[i] = $img.data('original');
+      });
 
       checkImages(images);
     });
@@ -761,17 +798,79 @@ jQuery(function ($) {
     '#baivong_noty_wrap{display:none;background:#fff;position:fixed;z-index:2147483647;right:20px;top:20px;min-width:150px;max-width:100%;padding:15px 25px;border:1px solid #ddd;border-radius:2px;box-shadow:0 0 0 1px rgba(0,0,0,.1),0 1px 10px rgba(0,0,0,.35);cursor:pointer}#baivong_noty_content{color:#444}#baivong_noty_content strong{font-weight:700}#baivong_noty_content.baivong_info strong{color:#2196f3}#baivong_noty_content.baivong_success strong{color:#4caf50}#baivong_noty_content.baivong_warning strong{color:#ffc107}#baivong_noty_content.baivong_error strong{color:#f44336}#baivong_noty_content strong.centered{display:block;text-align:center}#baivong_noty_close{position:absolute;right:0;top:0;font-size:18px;color:#ddd;height:20px;width:20px;line-height:20px;text-align:center}#baivong_noty_wrap:hover #baivong_noty_close{color:#333}'
   );
 
-  switch (domainName) {
-    case 'www.kuaikanmanhua.com':
-      configs = {
-        link: '.title.fl a[href^="/web/comic/"]',
-        name: 'h3.title',
-        init: getKuaikanManhua,
-      };
-      break;
-    default:
-      configs = {};
-      break;
+  if (/(www\.)?kuaikanmanhua\.com/.test(domainName)) {
+    configs = {
+      link: '.title.fl a[href^="/web/comic/"]',
+      name: 'h3.title',
+      init: getKuaikanManhua,
+    };
+  } else if (/newtoki\d*\.(com|net)/.test(domainName)) {
+    configs = {
+      link: '.item-subject',
+      name: function (_this) {
+        return (
+          $('[itemprop="description"] .view-content:first span').text().trim() +
+          ' ' +
+          $(_this)
+            .contents()
+            .filter(function (i, el) {
+              return el.nodeType === 3;
+            })
+            .text()
+            .trim()
+        );
+      },
+      init: getNewToki69,
+    };
+  } else if (domainName === 'manhwa18.net') {
+    configs = {
+      link: '#tab-chapper .chapter',
+      name: '[itemprop="name"]:last',
+      contents: '.chapter-content',
+      imgSrc: 'data-original',
+      filter: true,
+    };
+  } else if (domainName === 'manytoon.com') {
+    configs = {
+      link: '.wp-manga-chapter a',
+      name: function (_this) {
+        return (
+          $('.post-title h3')
+            .contents()
+            .filter(function (i, el) {
+              return el.nodeType === 3;
+            })
+            .text()
+            .trim() +
+          ' ' +
+          $(_this).text().trim()
+        );
+      },
+      contents: '.reading-content',
+    };
+  } else if (domainName === '18comic.org') {
+    configs = {
+      link: '.episode:visible a, .dropdown-toggle.reading:visible',
+      name: function (_this) {
+        var $this = $(_this),
+          mangaName = $('.panel-heading [itemprop="name"]:visible').text().trim();
+        if ($this.hasClass('reading')) return mangaName;
+        return (
+          mangaName +
+          ' ' +
+          $this
+            .find('li')
+            .contents()
+            .filter(function (i, el) {
+              return el.nodeType === 3;
+            })
+            .text()
+            .trim()
+        );
+      },
+      contents: '.panel-body',
+      imgSrc: 'data-original',
+    };
   }
 
   if (Array.isArray(configs)) {

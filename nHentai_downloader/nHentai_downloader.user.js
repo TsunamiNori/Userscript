@@ -1,39 +1,50 @@
 // ==UserScript==
-// @name            nHentai Downloader
-// @name:vi         nHentai Downloader
-// @namespace       http://devs.forumvi.com
-// @description     Download manga on nHentai.
-// @description:vi  Tải truyện tranh tại NhệnTái.
-// @version         2.0.0
-// @icon            http://i.imgur.com/FAsQ4vZ.png
-// @author          Zzbaivong
-// @oujs:author     baivong
-// @license         MIT; https://baivong.mit-license.org/license.txt
-// @match           http://nhentai.net/g/*
-// @match           https://nhentai.net/g/*
-// @require         https://code.jquery.com/jquery-3.5.1.min.js
-// @require         https://unpkg.com/jszip@3.4.0/dist/jszip.min.js
-// @require         https://unpkg.com/file-saver@2.0.2/dist/FileSaver.min.js
-// @require         https://greasyfork.org/scripts/28536-gm-config/code/GM_config.js?version=184529
-// @require         https://greasemonkey.github.io/gm4-polyfill/gm4-polyfill.js?v=a834d46
+// @name               nHentai Downloader
+// @name:vi            nHentai Downloader
+// @name:zh-CN         nHentai 下载器
+// @name:zh-TW         nHentai 下载器
+// @namespace          http://devs.forumvi.com
+// @description        Download manga on nHentai.
+// @description:vi     Tải truyện tranh tại NhệnTái.
+// @description:zh-CN  在nHentai上下载漫画。
+// @description:zh-TW  在nHentai上下载漫画。
+// @version            3.1.1
+// @icon               http://i.imgur.com/FAsQ4vZ.png
+// @author             Zzbaivong
+// @oujs:author        baivong
+// @license            MIT; https://baivong.mit-license.org/license.txt
+// @match              http://nhentai.net/g/*
+// @match              https://nhentai.net/g/*
+// @require            https://code.jquery.com/jquery-3.5.1.min.js
+// @require            https://cdn.jsdelivr.net/npm/web-streams-polyfill@2.0.2/dist/ponyfill.min.js
+// @require            https://cdn.jsdelivr.net/npm/streamsaver@2.0.3/StreamSaver.min.js
+// @require            https://cdn.jsdelivr.net/npm/streamsaver@2.0.4/examples/zip-stream.js
+// @require            https://greasyfork.org/scripts/28536-gm-config/code/GM_config.js?version=184529
+// @require            https://greasemonkey.github.io/gm4-polyfill/gm4-polyfill.js?v=a834d46
 // @noframes
-// @connect         self
-// @supportURL      https://github.com/lelinhtinh/Userscript/issues
-// @run-at          document-idle
-// @grant           GM.xmlHttpRequest
-// @grant           GM_xmlhttpRequest
-// @grant           unsafeWindow
-// @grant           GM_getValue
-// @grant           GM_setValue
-// @grant           GM.getValue
-// @grant           GM.setValue
+// @connect            self
+// @supportURL         https://github.com/lelinhtinh/Userscript/issues
+// @run-at             document-idle
+// @grant              GM.xmlHttpRequest
+// @grant              GM_xmlhttpRequest
+// @grant              unsafeWindow
+// @grant              GM_getValue
+// @grant              GM_setValue
+// @grant              GM.getValue
+// @grant              GM.setValue
 // ==/UserScript==
 
-(function ($, window) {
+/* global streamSaver, ZIP */
+(($, window) => {
   'use strict';
 
-  var configFrame = document.createElement('div');
-  $('#info-block').append(configFrame);
+  const configFrame = document.createElement('div'),
+    $infoBlock = $('#info-block');
+
+  $infoBlock.append(configFrame);
+  $infoBlock.append(
+    '<p style="text-align:left;padding:0 10px;color:#ff7600"><i class="fa fa-exclamation-triangle"></i> Enable 3rd-party cookies to allow streaming downloads.</p>'
+  );
 
   GM_config.init({
     id: 'nHentaiDlConfig',
@@ -55,29 +66,36 @@
         label: 'Max. conn. number',
         type: 'unsigned int',
         min: 1,
-        max: 32,
+        max: 16,
         default: 4,
+      },
+      hideTorrentBtn: {
+        label: 'Hide the download torrent button',
+        type: 'checkbox',
+        default: false,
       },
     },
     frame: configFrame,
     events: {
-      save: function () {
+      save: () => {
         outputExt = GM_config.get('outputExt');
         outputName = GM_config.get('outputName');
         threading = GM_config.get('threading');
+        hideTorrentBtn = GM_config.get('hideTorrentBtn');
 
-        $download.find('span').text(' as ' + outputExt.toUpperCase());
+        $download.find('span').text(` as ${outputExt.toUpperCase()}`);
+        $_download.toggle(!hideTorrentBtn);
 
-        var $saveBtn = $('#nHentaiDlConfig_saveBtn');
+        const $saveBtn = $('#nHentaiDlConfig_saveBtn');
         $saveBtn.prop('disabled', true).addClass('saved').text('Saved!');
 
-        setTimeout(function () {
+        setTimeout(() => {
           $saveBtn.prop('disabled', false).removeClass('saved').text('Save');
         }, 1500);
       },
     },
     css:
-      '#nHentaiDlConfig{width:100%!important;position:initial!important;padding:10px!important;background:#0d0d0d;border:1px solid #313131!important;border-radius:5px;text-align:left}#nHentaiDlConfig *{font-family:"Noto Sans",sans-serif}#nHentaiDlConfig .config_header{text-align:left;font-size:17px;font-weight:700;margin-bottom:20px;color:#999}#nHentaiDlConfig .reset_holder{float:left;height:30px;line-height:30px}#nHentaiDlConfig .reset{color:#4d4d4d;text-align:left}#nHentaiDlConfig .saveclose_buttons{margin:0;padding:4px;min-width:100px;height:30px;line-height:14px;border-radius:2px;border:1px solid;cursor:pointer}#nHentaiDlConfig .saveclose_buttons.saved{background:#ffeb3b;border:1px solid #ffc107}#nHentaiDlConfig #nHentaiDlConfig_closeBtn{display:none}#nHentaiDlConfig_buttons_holder{margin-top:20px;border-top:1px dashed #4d4d4d;padding-top:11px}#nHentaiDlConfig .config_var::after{clear:both;content:"";display:block}#nHentaiDlConfig .config_var{position:relative}#nHentaiDlConfig .field_label{font-size:14px;height:26px;line-height:26px;margin:0;padding:0 10px 0 0;width:30%;display:block;float:left}#nHentaiDlConfig .config_var>[type=text],#nHentaiDlConfig .config_var>div,#nHentaiDlConfig .config_var>select,#nHentaiDlConfig .config_var>textarea{width:70%;border-radius:0;display:block;height:26px;line-height:26px;padding:0 10px;float:left}#nHentaiDlConfig .config_var>textarea{height:auto;line-height:14px;padding:10px;min-height:5em}#nHentaiDlConfig .config_var>select{background:#4d4d4d;color:#d9d9d9;padding:0}#nHentaiDlConfig .config_var>select:hover{background:#666}#nHentaiDlConfig .config_var>select:focus{outline:0 none}#nHentaiDlConfig .config_var>div>label{display:inline-block;vertical-align:top;margin-right:5px}#nHentaiDlConfig .config_var>#nHentaiDlConfig_field_outputName{width:150px;text-transform:capitalize}#nHentaiDlConfig .config_var>#nHentaiDlConfig_field_threading{width:70px}#nHentaiDlConfig .config_var>div{padding:0}#nHentaiDlConfig_field_outputExt{text-transform:uppercase}#nHentaiDlConfig_field_outputExt [value=cbz]{margin-right:20px!important}',
+      '#nHentaiDlConfig{width:100%!important;position:initial!important;padding:10px!important;background:#0d0d0d;border:1px solid #313131!important;border-radius:5px;text-align:left}#nHentaiDlConfig *{font-family:"Noto Sans",sans-serif}#nHentaiDlConfig .config_header{text-align:left;font-size:17px;font-weight:700;margin-bottom:20px;color:#999}#nHentaiDlConfig .reset_holder{float:left;height:30px;line-height:30px}#nHentaiDlConfig .reset{color:#4d4d4d;text-align:left}#nHentaiDlConfig .saveclose_buttons{margin:0;padding:4px;min-width:100px;height:30px;line-height:14px;border-radius:2px;border:1px solid;cursor:pointer}#nHentaiDlConfig .saveclose_buttons.saved{background:#ffeb3b;border:1px solid #ffc107}#nHentaiDlConfig #nHentaiDlConfig_closeBtn{display:none}#nHentaiDlConfig_buttons_holder{margin-top:20px;border-top:1px dashed #4d4d4d;padding-top:11px}#nHentaiDlConfig .config_var::after{clear:both;content:"";display:block}#nHentaiDlConfig .config_var{position:relative}#nHentaiDlConfig .field_label{font-size:14px;height:26px;line-height:26px;margin:0;padding:0 10px 0 0;width:60%;display:block;float:left}#nHentaiDlConfig .config_var>[type=text],#nHentaiDlConfig .config_var>div,#nHentaiDlConfig .config_var>select,#nHentaiDlConfig .config_var>textarea{width:40%;border-radius:0;display:block;height:26px;line-height:26px;padding:0 10px;float:left}#nHentaiDlConfig .config_var>textarea{height:auto;line-height:14px;padding:10px;min-height:5em}#nHentaiDlConfig .config_var>select{background:#4d4d4d;color:#d9d9d9;padding:0}#nHentaiDlConfig .config_var>select:hover{background:#666}#nHentaiDlConfig .config_var>select:focus{outline:0 none}#nHentaiDlConfig .config_var>div>label{display:inline-block;vertical-align:top;margin-right:5px}#nHentaiDlConfig .config_var>#nHentaiDlConfig_field_outputName{width:150px;text-transform:capitalize}#nHentaiDlConfig .config_var>#nHentaiDlConfig_field_threading{width:70px}#nHentaiDlConfig .config_var>div{padding:0}#nHentaiDlConfig_field_outputExt{text-transform:uppercase}#nHentaiDlConfig_field_outputExt [value=cbz]{margin-right:20px!important}',
   });
 
   /**
@@ -90,34 +108,67 @@
    * Linux
    * $ rename 's/\.zip$/\.cbz/' *.zip
    */
-  var outputExt = GM_config.get('outputExt') || 'cbz';
+  let outputExt = GM_config.get('outputExt') || 'cbz';
 
   /**
    * File name
    * @type {'pretty'|'english'|'japanese'}
    */
-  var outputName = GM_config.get('outputName') || 'pretty';
+  let outputName = GM_config.get('outputName') || 'pretty';
 
   /**
    * Multithreading
-   * @type {Number} [1 -> 32]
+   * @type {Number} [1 -> 16]
    */
-  var threading = GM_config.get('threading') || 4;
+  let threading = GM_config.get('threading') || 4;
+
+  /**
+   * Hide Torrent Download button
+   * @type {Boolean}
+   */
+  let hideTorrentBtn = GM_config.get('hideTorrentBtn') || false;
 
   /**
    * Logging
    * @type {Boolean}
    */
-  var debug = false;
+  let debug = false;
 
-  function end() {
-    $win.off('beforeunload');
+  const _console = window.console;
+  const _time = window.console.time;
+  const _timeEnd = window.console.timeEnd;
+  const log = (...arg) => {
+    if (!debug) return;
+    _console.log(arg);
+  };
+  window.console = {
+    log: () => null,
+    clear: () => null,
+  };
 
-    if (debug) console.timeEnd('nHentai');
+  function base64toBlob(base64Data, contentType) {
+    contentType = contentType || '';
+    const sliceSize = 1024;
+    const byteCharacters = atob(base64Data);
+    const bytesLength = byteCharacters.length;
+    const slicesCount = Math.ceil(bytesLength / sliceSize);
+    const byteArrays = new Array(slicesCount);
+
+    for (let sliceIndex = 0; sliceIndex < slicesCount; ++sliceIndex) {
+      const begin = sliceIndex * sliceSize;
+      const end = Math.min(begin + sliceSize, bytesLength);
+
+      const bytes = new Array(end - begin);
+      for (let offset = begin, i = 0; offset < end; ++i, ++offset) {
+        bytes[i] = byteCharacters[offset].charCodeAt(0);
+      }
+      byteArrays[sliceIndex] = new Uint8Array(bytes);
+    }
+    return new Blob(byteArrays, { type: contentType });
   }
 
   function getInfo() {
-    var info = '',
+    let info = '',
       tags = [],
       artists = [],
       groups = [],
@@ -152,180 +203,222 @@
     info += '\r\n\r\n' + 'Pages: ' + total;
     info += '\r\n' + 'Uploaded at: ' + new Date(gallery.upload_date * 1000).toLocaleString() + '\r\n';
 
-    if (debug) console.log(info);
+    log(info);
     return info;
   }
 
-  function genZip() {
-    zip.file('info.txt', getInfo());
+  function end() {
+    $win.off('beforeunload').off('unload');
+    if (debug) _timeEnd('nHentai');
+  }
 
-    zip
-      .generateAsync(
-        {
-          type: 'blob',
-          compression: 'STORE',
-        },
-        function updateCallback(metadata) {
-          $download.html('<i class="fa fa-file-archive"></i> ' + metadata.percent.toFixed(2) + ' %');
-        }
-      )
-      .then(
-        function (blob) {
-          var zipName = gallery.title[outputName].replace(/\s+/g, '-') + '.' + comicId + '.' + outputExt;
+  function done(filename) {
+    doc.title = `[⇓] ${filename}`;
+    log('COMPLETE');
+    end();
+  }
 
-          if (prevZip) window.URL.revokeObjectURL(prevZip);
-          prevZip = blob;
+  function genZip(ctrl) {
+    ctrl.close();
+    $download.html('<i class="fa fa-check"></i> Complete').css('backgroundColor', hasErr ? 'red' : 'green');
+  }
 
-          $download
-            .html('<i class="fa fa-check"></i> Complete')
-            .css('backgroundColor', hasErr ? 'red' : 'green')
-            .attr({
-              href: window.URL.createObjectURL(prevZip),
-              download: zipName,
-            });
+  function dlImgError(current, success, error, err, filename) {
+    if (images[current].attempt < 1) {
+      final++;
+      error(err, filename);
+      return;
+    }
 
-          saveAs(blob, zipName);
-
-          doc.title = '[⇓] ' + gallery.title[outputName];
-          if (debug) console.log('COMPLETE');
-          end();
-        },
-        function (reason) {
-          $download.html('<i class="fa fa-exclamation"></i> Fail').css('backgroundColor', 'red');
-
-          doc.title = '[x] ' + gallery.title[outputName];
-          if (debug) console.error(reason, 'ERROR');
-          end();
-        }
-      );
+    setTimeout(() => {
+      log(filename, `retry ${images[current].attempt}`);
+      dlImg(current, success, error);
+      images[current].attempt--;
+    }, 2000);
   }
 
   function dlImg(current, success, error) {
-    var url = images[current].url,
+    let url = images[current].url,
       filename = url.replace(/.*\//g, '');
 
-    filename = ('0000' + filename).slice(-8);
-    if (debug) console.log(filename, 'progress');
+    filename = `000${filename}`.slice(-8);
+    log(filename, 'progress');
 
     GM.xmlHttpRequest({
       method: 'GET',
       url: url,
-      responseType: 'arraybuffer',
-      onload: function (response) {
-        final++;
-        success(response, filename);
-      },
-      onerror: function (err) {
-        if (images[current].attempt <= 0) {
-          final++;
-          error(err, filename);
+      responseType: 'blob',
+      onload: (response) => {
+        if (
+          response.response.type === 'text/html' ||
+          response.response.byteLength < 1000 ||
+          (response.statusText !== 'OK' && response.statusText !== '')
+        ) {
+          dlImgError(current, success, error, response, filename);
           return;
         }
 
-        setTimeout(function () {
-          if (debug) console.log(filename, 'retry ' + images[current].attempt);
-          dlImg(current, success, error);
-          images[current].attempt--;
-        }, 2000);
+        final++;
+        success(response, filename);
+      },
+      onerror: (err) => {
+        dlImgError(current, success, error, err, filename);
       },
     });
   }
 
-  function next() {
-    $download.html('<i class="fa fa-cog fa-spin"></i> ' + final + '/' + total);
-    if (debug) console.log(final, current);
+  function next(ctrl) {
+    doc.title = `[${final}/${total}] ${filename}`;
+    $download.find('strong').text(`${final}/${total}`);
+    log(final, current);
 
     if (final < current) return;
-    final < total ? addZip() : genZip();
+    final < total ? addZip(ctrl) : genZip(ctrl);
   }
 
-  function addZip() {
-    var max = current + threading;
+  function addZip(ctrl) {
+    let max = current + threading;
     if (max > total) max = total;
 
     for (current; current < max; current++) {
-      if (debug) console.log(images[current].url, 'download');
+      log(images[current].url, 'download');
       dlImg(
         current,
-        function (response, filename) {
-          zip.file(filename, response.response);
+        (response, filename) => {
+          ctrl.enqueue({ name: filename, stream: () => response.response.stream() });
 
-          if (debug) console.log(filename, 'success');
-          next();
+          log(filename, 'success');
+          next(ctrl);
         },
-        function (err, filename) {
+        (err, filename) => {
           hasErr = true;
-          zip.file(filename + '_error.txt', err.statusText + '\r\n' + err.finalUrl);
+
+          const errGif = base64toBlob('R0lGODdhBQAFAIACAAAAAP/eACwAAAAABQAFAAACCIwPkWerClIBADs=', 'image/gif');
+          ctrl.enqueue({ name: `${filename}_error.gif`, stream: () => errGif.stream() });
+
           $download.css('backgroundColor', '#FF7F7F');
 
-          if (debug) console.log(filename, 'error');
-          next();
+          log(err, 'error');
+          next(ctrl);
         }
       );
     }
-    if (debug) console.log(current, 'current');
+    log(current, 'current');
   }
 
-  var gallery = JSON.parse(JSON.stringify(window._gallery));
-  if (debug) console.log(gallery, 'gallery');
+  const gallery = JSON.parse(JSON.stringify(window._gallery));
+  log(gallery, 'gallery');
   if (!gallery) return;
 
-  var zip = new JSZip(),
-    prevZip = false,
-    current = 0,
+  let current = 0,
     final = 0,
     total = gallery.num_pages,
     images = gallery.images.pages,
     hasErr = false,
     $_download = $('#download-torrent, #download'),
     $download,
+    $config,
+    $configPanel,
     doc = document,
     $win = $(window),
-    comicId = gallery.id;
+    comicId = gallery.id,
+    filename = gallery.title[outputName] || gallery.title['english'],
+    zipName = `${filename.replace(/\s+/g, '-').replace(/・/g, '·')}.${comicId}.${outputExt}`,
+    readableStream,
+    writableStream,
+    writer,
+    inProgress = false;
 
   if (!$_download.length) return;
   GM_config.open();
-
-  window.URL = window.URL || window.webkitURL;
+  $configPanel = $('#nHentaiDlConfig');
 
   $download = $_download.clone();
   $download.removeAttr('id');
   $download.removeClass('btn-disabled');
   $download.attr('href', '#download');
   $download.find('.top').html('No login required<br>No sign up required<i></i>');
-  $download.append('<span> as ' + outputExt.toUpperCase() + '</span>');
+  $download.append(`<span> as ${outputExt.toUpperCase()}</span>`);
 
   $download.insertAfter($_download);
   $download.before('\n');
 
-  $download.css('backgroundColor', 'cornflowerblue').one('click', function (e) {
+  $download.css('backgroundColor', 'cornflowerblue').on('click', (e) => {
     e.preventDefault();
-    if (debug) console.time('nHentai');
-    if (debug) console.log({ outputExt, outputName, threading });
+    if (inProgress) return;
+    inProgress = true;
+
+    if (debug) _time('nHentai');
+    log({ outputExt, outputName, threading });
 
     if (threading < 1) threading = 1;
-    if (threading > 32) threading = 32;
+    if (threading > 16) threading = 16;
 
-    $win.on('beforeunload', function () {
-      return 'Progress is running...';
-    });
+    doc.title = `[⇣] ${filename}`;
+    $win
+      .on('beforeunload', (e) => {
+        e.originalEvent.returnValue = 'Progress is running...';
+      })
+      .on('unload', () => {
+        if (writableStream) writableStream.abort();
+        if (writer) writer.abort();
+      });
 
-    $download.html('<i class="fa fa-cog fa-spin"></i> Waiting...').css('backgroundColor', 'orange');
+    $download
+      .html('<i class="fa fa-spinner fa-spin"></i> <strong>Waiting...</strong>')
+      .css('backgroundColor', 'orange');
 
-    images = images.map(function (img, index) {
+    images = images.map((img, index) => {
       return {
-        url:
-          'https://i.nhentai.net/galleries/' +
-          gallery.media_id +
-          '/' +
-          (index + 1) +
-          '.' +
-          { j: 'jpg', p: 'png', g: 'gif' }[img.t],
+        url: `https://i.nhentai.net/galleries/${gallery.media_id}/${index + 1}.${
+          { j: 'jpg', p: 'png', g: 'gif' }[img.t]
+        }`,
         attempt: 3,
       };
     });
-    if (debug) console.log(images, 'images');
+    log(images, 'images');
 
-    addZip();
+    streamSaver.mitm = 'https://lelinhtinh.github.io/stream/mitm.html';
+    writableStream = streamSaver.createWriteStream(zipName);
+
+    const info = new Blob([getInfo()]);
+    readableStream = new ZIP({
+      start(ctrl) {
+        ctrl.enqueue({
+          name: 'info.txt',
+          stream: () => info.stream(),
+        });
+      },
+      pull(ctrl) {
+        addZip(ctrl);
+      },
+    });
+
+    if (window.WritableStream && readableStream.pipeTo) {
+      readableStream.pipeTo(writableStream).then(() => {
+        done(filename);
+      });
+    } else {
+      const writer = writableStream.getWriter();
+      const reader = readableStream.getReader();
+      const pump = () => reader.read().then((res) => (res.done ? writer.close() : writer.write(res.value).then(pump)));
+      pump().then(() => done(filename));
+    }
   });
+
+  $configPanel.toggle();
+  $config = $_download.clone();
+  $config.removeAttr('id');
+  $config.removeClass('btn-disabled');
+  $config.attr('href', '#settings');
+  $config.css('min-width', '40px');
+  $config.html('<i class="fa fa-cog"></i><div class="top">Toggle settings<i></i></div>');
+
+  $config.insertAfter($download);
+  $config.on('click', (e) => {
+    e.preventDefault();
+    $configPanel.toggle('fast');
+  });
+
+  if (hideTorrentBtn) $_download.hide();
 })(jQuery, unsafeWindow);

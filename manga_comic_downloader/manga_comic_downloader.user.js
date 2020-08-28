@@ -4,7 +4,7 @@
 // @namespace       https://baivong.github.io
 // @description     Tải truyện tranh từ các trang chia sẻ ở Việt Nam. Nhấn Alt+Y để tải toàn bộ.
 // @description:vi  Tải truyện tranh từ các trang chia sẻ ở Việt Nam. Nhấn Alt+Y để tải toàn bộ.
-// @version         2.11.0
+// @version         2.11.5
 // @icon            https://i.imgur.com/ICearPQ.png
 // @author          Zzbaivong
 // @license         MIT; https://baivong.mit-license.org/license.txt
@@ -56,7 +56,7 @@
 // @match           https://hoitruyentranh.com/*
 // @match           https://truyenvn.com/*
 // @require         https://code.jquery.com/jquery-3.5.1.min.js
-// @require         https://unpkg.com/jszip@3.4.0/dist/jszip.min.js
+// @require         https://unpkg.com/jszip@3.1.5/dist/jszip.min.js
 // @require         https://unpkg.com/file-saver@2.0.2/dist/FileSaver.min.js
 // @require         https://greasemonkey.github.io/gm4-polyfill/gm4-polyfill.js?v=a834d46
 // @require         https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.0.0/crypto-js.min.js
@@ -287,8 +287,17 @@ jQuery(function ($) {
     if (status !== 'warning' && status !== 'success') autoHide();
   }
 
+  function targetLink(selector) {
+    return configs.link
+      .split(/\s*,\s*/)
+      .map(function (i) {
+        return i + selector;
+      })
+      .join(',');
+  }
+
   function linkError() {
-    $(configs.link + '[href="' + configs.href + '"]').css({
+    $(targetLink('[href="' + configs.href + '"]')).css({
       color: 'red',
       textShadow: '0 0 1px red, 0 0 1px red, 0 0 1px red',
     });
@@ -296,7 +305,7 @@ jQuery(function ($) {
   }
 
   function linkSuccess() {
-    var $currLink = $(configs.link + '[href="' + configs.href + '"]');
+    var $currLink = $(targetLink('[href="' + configs.href + '"]'));
     if (!hasDownloadError)
       $currLink.css({
         color: 'green',
@@ -350,7 +359,7 @@ jQuery(function ($) {
       return configs.href.indexOf(l) === -1;
     });
 
-    $(configs.link + '[href="' + configs.href + '"]').css({
+    $(targetLink('[href="' + configs.href + '"]')).css({
       color: 'orange',
       fontWeight: 'bold',
       fontStyle: 'italic',
@@ -384,7 +393,7 @@ jQuery(function ($) {
             return _link.indexOf(l) === -1;
           });
 
-          $(configs.link + '[href="' + _link + '"]').css({
+          $(targetLink('[href="' + _link + '"]')).css({
             color: 'gray',
             fontWeight: 'bold',
             fontStyle: 'italic',
@@ -399,7 +408,7 @@ jQuery(function ($) {
 
           dlAll.push(_link);
 
-          $(configs.link + '[href="' + _link + '"]').css({
+          $(targetLink('[href="' + _link + '"]')).css({
             color: 'violet',
             textDecoration: 'overline',
             textShadow: '0 0 1px violet, 0 0 1px violet, 0 0 1px violet',
@@ -423,7 +432,7 @@ jQuery(function ($) {
     if (!inCustom && !dlAll.length) dlAllGen();
     if (!dlAll.length) return;
     inAuto = true;
-    $(configs.link + '[href*="' + dlAll[0] + '"]').trigger('contextmenu');
+    $(targetLink('[href*="' + dlAll[0] + '"]')).trigger('contextmenu');
   }
 
   function downloadAllOne() {
@@ -434,8 +443,8 @@ jQuery(function ($) {
   function genFileName() {
     chapName = chapName
       .replace(/\s+/g, '_')
-      .replace(/\./g, '-')
-      .replace(/(^[\W_]+|[\W_]+$)/, '');
+      .replace(/・/g, '·')
+      .replace(/(^_+|_+$)/, '');
     if (hasDownloadError) chapName = '__ERROR__' + chapName;
     return chapName;
   }
@@ -456,7 +465,7 @@ jQuery(function ($) {
 
     if (inAuto) {
       if (dlAll.length) {
-        $(configs.link + '[href*="' + dlAll[0] + '"]').trigger('contextmenu');
+        $(targetLink('[href*="' + dlAll[0] + '"]')).trigger('contextmenu');
       } else {
         inAuto = false;
         inCustom = false;
@@ -714,7 +723,7 @@ jQuery(function ($) {
 
         if (
           !imgExt ||
-          response.response.byteLength < 300 ||
+          response.response.byteLength < 100 ||
           (response.statusText !== 'OK' && response.statusText !== '')
         ) {
           dlImgError(current, success, error, response, filename);
@@ -837,6 +846,8 @@ jQuery(function ($) {
       notyImages();
     } else {
       $.each(images, function (i, v) {
+        v = v.replace(/^[\s\n]+|[\s\n]+$/g, '');
+
         var keep = keepOriginal.some(function (key) {
           return v.indexOf(key) !== -1;
         });
@@ -1589,9 +1600,12 @@ jQuery(function ($) {
     case 'comicvn.net':
     case 'beeng.net':
       configs = {
-        link: '.manga-chapter a',
-        name: '#site-title',
-        contents: '#image-load',
+        link: '#scrollbar a',
+        name: function (_this) {
+          return $('.detail h4').text().trim() + ' ' + $(_this).find('.titleComic').text().trim();
+        },
+        contents: '#lightgallery',
+        imgSrc: 'data-src',
       };
       break;
     case 'hamtruyen.com':
@@ -1811,8 +1825,8 @@ jQuery(function ($) {
     case 'vietcomic.net':
       configs = {
         link: '.chapter-list a:not([rel="nofollow"])',
-        name: function (_this) {
-          return $('.manga-info-text h1').text().trim() + ' ' + $(_this).text().trim();
+        name: function (_this, chapName) {
+          return $('.manga-info-text h1').text().trim() + ' ' + chapName;
         },
         init: getVietComic,
       };
