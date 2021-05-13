@@ -1,5 +1,6 @@
 {
   "cSpell.words": [
+    "Adblocker",
     "EPUB",
     "JSAes",
     "Kuaikan",
@@ -30,8 +31,10 @@
     "chapid",
     "chuc",
     "comicvn",
+    "csrf",
     "dataip",
     "fbcdn",
+    "fflate",
     "forumnt",
     "ggpht",
     "goiy",
@@ -51,8 +54,11 @@
     "jepub",
     "kkmh",
     "kuaikanmanhua",
+    "labelledby",
     "lhmanga",
     "lhscanlation",
+    "luan",
+    "lxhentai",
     "mangadex",
     "mangak",
     "mangaqq",
@@ -75,8 +81,10 @@
     "otakuscan",
     "oujs",
     "paddfixboth",
+    "phieu",
     "qqtaku",
     "rawdevart",
+    "sach",
     "sachvui",
     "shopotaku",
     "tentruyen",
@@ -84,6 +92,7 @@
     "truyen",
     "truyenchon",
     "truyencv",
+    "truyendep",
     "truyenhay",
     "truyenqq",
     "truyensieuhay",
@@ -103,5 +112,8 @@
     "vnsharing",
     "vnvl",
     "vungdoc"
-  ]
+  ],
+  "editor.codeActionsOnSave": {
+    "source.fixAll.eslint": true
+  }
 }

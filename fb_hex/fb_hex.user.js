@@ -4,7 +4,7 @@
 // @namespace       https://lelinhtinh.github.io
 // @description     Convert HEX to text, in a post or comment on Facebook.
 // @description:vi  Chuyển đổi HEX thành URL hoặc text, trong bài viết hoặc bình luận trên Facebook.
-// @version         0.9.2
+// @version         1.0.0
 // @icon            https://i.imgur.com/oz5CjJe.png
 // @author          lelinhtinh
 // @oujs:author     baivong
@@ -59,46 +59,25 @@ function copyTextToClipboard(text) {
     return;
   }
 
-  navigator.clipboard.writeText(text).catch(err => {
+  navigator.clipboard.writeText(text).catch((err) => {
     console.error('Async: Could not copy text', err);
   });
 }
 
-function validURL(str) {
-  const pattern = new RegExp(
-    '^(https?:\\/\\/)?' +
-      '((([a-z\\d]([a-z\\d-]*[a-z\\d])*)\\.)+[a-z]{2,}|' +
-      '((\\d{1,3}\\.){3}\\d{1,3}))' +
-      '(\\:\\d+)?(\\/[-a-z\\d%_.~+]*)*' +
-      '(\\?[;&a-z\\d%_.~+=-]*)?' +
-      '(\\#[-a-z\\d_]*)?$',
-    'i'
-  );
-
-  return !!pattern.test(str);
-}
-
-function hex2ascii(hex) {
-  if (!(typeof hex === 'number' || typeof hex == 'string')) return '';
-
-  hex = hex.toString().replace(/\s+/gi, '');
-  const stack = [];
-
-  for (let i = 0; i < hex.length; i += 2) {
-    const code = parseInt(hex.substr(i, 2), 16);
-    if (!isNaN(code) && code !== 0) {
-      stack.push(String.fromCharCode(code));
-    }
+function validURL(url) {
+  try {
+    const uri = new URL(url);
+    return !!uri.host && uri.host.includes('.');
+  } catch (e) {
+    return false;
   }
-
-  return stack.join('');
 }
 
 function cleanWordBreak(post) {
   if (post.querySelector('.word_break') !== null) {
-    post.querySelectorAll('wbr').forEach(e => e.remove());
+    post.querySelectorAll('wbr').forEach((e) => e.remove());
 
-    post.querySelectorAll('span').forEach(span => {
+    post.querySelectorAll('span').forEach((span) => {
       if (span.querySelector('span, img') !== null) return;
       const text = document.createTextNode(span.textContent);
       span.parentNode.replaceChild(text, span);
@@ -106,51 +85,87 @@ function cleanWordBreak(post) {
   }
 }
 
-function getResult(post) {
-  let content = post.textContent.match(/\b[a-f0-9\s]{12,}\b/i);
-  if (content === null) return;
+function renderResult(post, data) {
+  const { content, result } = data;
+  if (!content || !result) return;
 
-  content = content[0].trim();
-  const result = hex2ascii(content);
+  copyTextToClipboard(result);
 
-  return { content, result };
+  post.innerHTML = post.innerHTML.replace(
+    content,
+    `
+<strong
+  class="fb-hex${validURL(result) ? ' fb-hex-link' : ''}"
+  title="Copied to clipboard${COPY_ONLY ? '' : '\nClick to open in new tab'}"
+  style="cursor:pointer"
+>${result}</strong>
+    `,
+  );
 }
 
 function handle(post) {
   if (post.querySelector('.fb-hex') !== null) return;
   cleanWordBreak(post);
 
-  const { content, result } = getResult(post);
-  copyTextToClipboard(result);
+  const handleURL = URL.createObjectURL(
+    new Blob(
+      [
+        '(',
+        function () {
+          self.onmessage = (e) => {
+            function hex2ascii(hex) {
+              if (!(typeof hex === 'number' || typeof hex == 'string')) return '';
 
-  post.innerHTML = post.innerHTML.replace(
-    content,
-    `
-    <strong
-      class="fb-hex${validURL(result) ? ' fb-hex-link' : ''}"
-      title="Copied to clipboard${COPY_ONLY ? '' : '\nClick to open in new tab'}"
-      style="cursor:pointer"
-    >${result}</strong>
-    `
+              hex = hex.toString().replace(/\s+/gi, '');
+              const stack = [];
+
+              for (let i = 0; i < hex.length; i += 2) {
+                const code = parseInt(hex.substr(i, 2), 16);
+                if (!isNaN(code) && code !== 0) {
+                  stack.push(String.fromCharCode(code));
+                }
+              }
+
+              return stack.join('');
+            }
+
+            function getResult(content) {
+              content = content.match(/\b[a-f0-9\s]{12,}\b/i);
+              if (content === null) return {};
+
+              content = content[0].trim();
+              const result = hex2ascii(content);
+
+              return { content, result };
+            }
+
+            self.postMessage(getResult(e.data));
+          };
+        }.toString(),
+        ')()',
+      ],
+      {
+        type: 'application/javascript',
+      },
+    ),
   );
+  const worker = new Worker(handleURL);
+
+  worker.onmessage = (e) => {
+    if (!e.data) return;
+    renderResult(post, e.data);
+  };
+  worker.postMessage(post.textContent);
 }
 
 function getPost(e) {
   const target = e.target;
 
-  let post = target.closest('.msg');
-  if (post !== null) {
-    handle(post.querySelector('div'));
-    return;
-  }
+  if (target.getAttribute('role') === 'button') return;
+  const role = target.closest('[role]');
+  if (role.getAttribute('role') !== 'article') return;
 
-  post = target.closest('[data-sigil="comment-body"]');
-  if (post !== null) {
-    handle(post);
-    return;
-  }
-
-  post = target.closest('p, span, [dir="auto"], [data-ft] > div[style]');
+  const post = target.closest('p, span, [dir="auto"], [data-ft] > div[style]');
   if (post === null) return;
 
   const parent = post.parentNode;

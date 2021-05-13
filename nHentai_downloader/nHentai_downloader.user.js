@@ -8,7 +8,7 @@
 // @description:vi     Tải truyện tranh tại NhệnTái.
 // @description:zh-CN  在nHentai上下载漫画。
 // @description:zh-TW  在nHentai上下载漫画。
-// @version            3.1.1
+// @version            3.1.4
 // @icon               http://i.imgur.com/FAsQ4vZ.png
 // @author             Zzbaivong
 // @oujs:author        baivong
@@ -16,9 +16,9 @@
 // @match              http://nhentai.net/g/*
 // @match              https://nhentai.net/g/*
 // @require            https://code.jquery.com/jquery-3.5.1.min.js
-// @require            https://cdn.jsdelivr.net/npm/web-streams-polyfill@2.0.2/dist/ponyfill.min.js
-// @require            https://cdn.jsdelivr.net/npm/streamsaver@2.0.3/StreamSaver.min.js
-// @require            https://cdn.jsdelivr.net/npm/streamsaver@2.0.4/examples/zip-stream.js
+// @require            https://cdn.jsdelivr.net/npm/web-streams-polyfill@3.0.1/dist/ponyfill.min.js
+// @require            https://cdn.jsdelivr.net/npm/streamsaver@2.0.5/StreamSaver.min.js
+// @require            https://cdn.jsdelivr.net/npm/streamsaver@2.0.5/examples/zip-stream.js
 // @require            https://greasyfork.org/scripts/28536-gm-config/code/GM_config.js?version=184529
 // @require            https://greasemonkey.github.io/gm4-polyfill/gm4-polyfill.js?v=a834d46
 // @noframes
@@ -43,7 +43,7 @@
 
   $infoBlock.append(configFrame);
   $infoBlock.append(
-    '<p style="text-align:left;padding:0 10px;color:#ff7600"><i class="fa fa-exclamation-triangle"></i> Enable 3rd-party cookies to allow streaming downloads.</p>'
+    '<p style="text-align:left;padding:0 10px;color:#ff7600"><i class="fa fa-exclamation-triangle"></i> Enable 3rd-party cookies to allow streaming downloads.</p>',
   );
 
   GM_config.init({
@@ -207,8 +207,13 @@
     return info;
   }
 
+  function beforeleaving(e) {
+    e.preventDefault();
+    e.returnValue = '';
+  }
+
   function end() {
-    $win.off('beforeunload').off('unload');
+    window.removeEventListener('beforeunload', beforeleaving);
     if (debug) _timeEnd('nHentai');
   }
 
@@ -268,7 +273,7 @@
   }
 
   function next(ctrl) {
-    doc.title = `[${final}/${total}] ${filename}`;
+    doc.title = `[${final}/${total}] ${comicName}`;
     $download.find('strong').text(`${final}/${total}`);
     log(final, current);
 
@@ -300,7 +305,7 @@
 
           log(err, 'error');
           next(ctrl);
-        }
+        },
       );
     }
     log(current, 'current');
@@ -320,13 +325,14 @@
     $config,
     $configPanel,
     doc = document,
-    $win = $(window),
     comicId = gallery.id,
-    filename = gallery.title[outputName] || gallery.title['english'],
-    zipName = `${filename.replace(/\s+/g, '-').replace(/・/g, '·')}.${comicId}.${outputExt}`,
+    comicName = gallery.title[outputName] || gallery.title['english'],
+    zipName = `${comicName
+      .replace(/[\s|+=]+/g, '-')
+      .replace(/[:;`'"”“/\\?.,<>[\]{}!@#$%^&*]/g, '')
+      .replace(/・/g, '·')}.${comicId}.${outputExt}`,
     readableStream,
     writableStream,
-    writer,
     inProgress = false;
 
   if (!$_download.length) return;
@@ -354,15 +360,8 @@
     if (threading < 1) threading = 1;
     if (threading > 16) threading = 16;
 
-    doc.title = `[⇣] ${filename}`;
-    $win
-      .on('beforeunload', (e) => {
-        e.originalEvent.returnValue = 'Progress is running...';
-      })
-      .on('unload', () => {
-        if (writableStream) writableStream.abort();
-        if (writer) writer.abort();
-      });
+    doc.title = `[⇣] ${comicName}`;
+    window.addEventListener('beforeunload', beforeleaving);
 
     $download
       .html('<i class="fa fa-spinner fa-spin"></i> <strong>Waiting...</strong>')
@@ -396,13 +395,13 @@
 
     if (window.WritableStream && readableStream.pipeTo) {
       readableStream.pipeTo(writableStream).then(() => {
-        done(filename);
+        done(comicName);
       });
     } else {
       const writer = writableStream.getWriter();
       const reader = readableStream.getReader();
       const pump = () => reader.read().then((res) => (res.done ? writer.close() : writer.write(res.value).then(pump)));
-      pump().then(() => done(filename));
+      pump().then(() => done(comicName));
     }
   });
 

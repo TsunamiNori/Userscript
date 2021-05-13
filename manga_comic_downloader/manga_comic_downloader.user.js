@@ -4,7 +4,7 @@
 // @namespace       https://baivong.github.io
 // @description     Tải truyện tranh từ các trang chia sẻ ở Việt Nam. Nhấn Alt+Y để tải toàn bộ.
 // @description:vi  Tải truyện tranh từ các trang chia sẻ ở Việt Nam. Nhấn Alt+Y để tải toàn bộ.
-// @version         2.11.5
+// @version         3.1.0
 // @icon            https://i.imgur.com/ICearPQ.png
 // @author          Zzbaivong
 // @license         MIT; https://baivong.mit-license.org/license.txt
@@ -23,6 +23,9 @@
 // @match           https://*.a3manga.com/*
 // @match           http://truyentranhtuan.com/*
 // @match           http://mangak.info/*
+// @match           http://mangak.net/*
+// @match           http://mangak.com/*
+// @match           https://truyendep.com/*
 // @match           https://truyentranhlh.net/*
 // @match           https://truyentranhlh.com/*
 // @match           https://hocvientruyentranh.net/*
@@ -33,9 +36,12 @@
 // @match           http://truyentranh1.info/*
 // @match           http://*.hentailxx.com/*
 // @match           https://*.hentailxx.com/*
+// @match           http://lxhentai.com/*
+// @match           https://lxhentai.com/*
 // @match           https://hentaivn.net/*
 // @match           https://otakusan.net/*
 // @match           https://ngonphongcomics.com/*
+// @match           https://*.nettruyen.com/*
 // @match           http://*.nettruyen.com/*
 // @match           http://nhattruyen.com/*
 // @match           http://*.hamtruyentranh.net/*
@@ -55,8 +61,11 @@
 // @match           https://hoihentai.com/*
 // @match           https://hoitruyentranh.com/*
 // @match           https://truyenvn.com/*
+// @match           https://*.saytruyen.net/*
+// @match           https://*.saytruyen.com/*
+// @match           https://*.sayhentai.net/*
 // @require         https://code.jquery.com/jquery-3.5.1.min.js
-// @require         https://unpkg.com/jszip@3.1.5/dist/jszip.min.js
+// @require         https://unpkg.com/fflate@0.4.2/umd/index.js
 // @require         https://unpkg.com/file-saver@2.0.2/dist/FileSaver.min.js
 // @require         https://greasemonkey.github.io/gm4-polyfill/gm4-polyfill.js?v=a834d46
 // @require         https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.0.0/crypto-js.min.js
@@ -72,6 +81,7 @@
 // @grant           GM_registerMenuCommand
 // ==/UserScript==
 
+/* global fflate */
 window._URL = window.URL || window.webkitURL;
 
 jQuery(function ($) {
@@ -147,6 +157,7 @@ jQuery(function ($) {
     'truyen.cloud': 'http://www.nettruyen.com',
     'proxy.truyen.cloud': 'http://www.nettruyen.com',
     'i.netsnippet.com': 'http://www.nettruyen.com/',
+    'forumnt.com': 'http://www.nettruyen.com/',
     'upload.forumnt.com': 'http://www.nettruyen.com/',
     'upload2.forumnt.com': 'http://www.nettruyen.com/',
     'upload.upanhmoi.net': 'https://upanhmoi.net',
@@ -282,7 +293,7 @@ jQuery(function ($) {
         },
         function () {
           autoHide();
-        }
+        },
       );
     if (status !== 'warning' && status !== 'success') autoHide();
   }
@@ -313,9 +324,14 @@ jQuery(function ($) {
       });
   }
 
+  function beforeleaving(e) {
+    e.preventDefault();
+    e.returnValue = '';
+  }
+
   function cancelProgress() {
     linkError();
-    $win.off('beforeunload');
+    window.removeEventListener('beforeunload', beforeleaving);
   }
 
   function notyError() {
@@ -344,10 +360,7 @@ jQuery(function ($) {
     addZip();
 
     noty('Bắt đầu tải <strong>' + chapName + '</strong>', 'warning');
-
-    $win.on('beforeunload', function () {
-      return 'Progress is running...';
-    });
+    window.addEventListener('beforeunload', beforeleaving);
   }
 
   function notyWait() {
@@ -408,19 +421,20 @@ jQuery(function ($) {
 
           dlAll.push(_link);
 
+          var color = e.shiftKey ? 'violet' : 'purple';
           $(targetLink('[href="' + _link + '"]')).css({
-            color: 'violet',
+            color: color,
             textDecoration: 'overline',
-            textShadow: '0 0 1px violet, 0 0 1px violet, 0 0 1px violet',
+            textShadow: '0 0 1px ' + color + ', 0 0 1px ' + color + ', 0 0 1px ' + color,
           });
         }
       })
       .on('keyup', function (e) {
-        if (e.which === 17 || e.which === 16) {
+        if (e.key === 'Control' || e.key === 'Shift') {
           e.preventDefault();
 
           if (dlAll.length && inCustom) {
-            if (e.which === 16) inMerge = true;
+            if (e.key === 'Shift') inMerge = true;
             downloadAll();
           }
         }
@@ -451,8 +465,9 @@ jQuery(function ($) {
 
   function endZip() {
     if (!inMerge) {
-      dlZip = new JSZip();
-      dlPrevZip = false;
+      zipObj = {};
+      if (recentZip) URL.revokeObjectURL(recentZip);
+      recentZip = null;
     }
 
     dlCurrent = 0;
@@ -476,47 +491,44 @@ jQuery(function ($) {
   function genZip() {
     noty('Tạo file nén của <strong>' + chapName + '</strong>', 'warning');
 
-    dlZip
-      .generateAsync(
-        {
-          type: 'blob',
-          compression: 'STORE',
-        },
-        function updateCallback(metadata) {
-          noty('Đang nén file <strong>' + metadata.percent.toFixed(2) + '%</strong>', 'warning');
-        }
-      )
-      .then(
-        function (blob) {
-          var zipName = genFileName() + '.' + outputExt;
-
-          if (dlPrevZip) URL.revokeObjectURL(dlPrevZip);
-          dlPrevZip = blob;
-
-          noty(
-            '<a href="' +
-              URL.createObjectURL(dlPrevZip) +
-              '" download="' +
-              zipName +
-              '"><strong>Click vào đây</strong></a> nếu trình duyệt không tự tải xuống',
-            'success'
-          );
-          linkSuccess();
-
-          $win.off('beforeunload');
-          saveAs(blob, zipName);
-
-          document.title = '[⇓] ' + tit;
-          endZip();
-        },
-        function () {
+    fflate.zip(
+      zipObj,
+      {
+        level: 6,
+        mtime: 0,
+      },
+      function (err, out) {
+        if (err) {
           noty('Lỗi tạo file nén của <strong>' + chapName + '</strong>', 'error');
           cancelProgress();
 
           document.title = '[x] ' + tit;
           endZip();
+        } else {
+          var blob = new Blob([out]);
+          var zipName = genFileName() + '.' + outputExt;
+
+          if (recentZip) URL.revokeObjectURL(recentZip);
+          recentZip = blob;
+
+          noty(
+            '<a href="' +
+              URL.createObjectURL(recentZip) +
+              '" download="' +
+              zipName +
+              '"><strong>Click vào đây</strong></a> nếu trình duyệt không tự tải xuống',
+            'success',
+          );
+          linkSuccess();
+
+          window.removeEventListener('beforeunload', beforeleaving);
+          saveAs(blob, zipName);
+
+          document.title = '[⇓] ' + tit;
+          endZip();
         }
-      );
+      },
+    );
   }
 
   /* global CryptoJS, chapterHTML */
@@ -694,9 +706,13 @@ jQuery(function ($) {
   function dlImg(current, success, error) {
     var url = dlImages[current].url,
       filename = ('0000' + dlCurrent).slice(-4),
-      urlObj = new URL(url),
-      urlHost = urlObj.hostname,
+      urlObj,
+      urlHost,
       headers = {};
+
+    if (url.indexOf('//') === 0) url = location.protocol + url;
+    urlObj = new URL(url);
+    urlHost = urlObj.hostname;
 
     if (referer[urlHost]) {
       headers.referer = referer[urlHost];
@@ -771,18 +787,28 @@ jQuery(function ($) {
       dlImg(
         dlCurrent,
         function (response, filename) {
-          dlZip.file(path + filename, response.response);
+          zipObj[path + filename] = [
+            new Uint8Array(response.response),
+            {
+              level: 0,
+            },
+          ];
 
           next();
         },
         function (err, filename) {
-          dlZip.file(path + filename + '_error.txt', err.statusText + '\r\n' + err.finalUrl);
+          zipObj[path + filename + '_error.txt'] = [
+            fflate.strToU8(err.statusText + '\r\n' + err.finalUrl),
+            {
+              level: 6,
+            },
+          ];
 
           noty(err.statusText, 'error');
           linkError();
 
           next();
-        }
+        },
       );
     }
   }
@@ -883,9 +909,7 @@ jQuery(function ($) {
     var images = [];
     $contents.each(function (i, v) {
       var $img = $(v);
-      images[i] = !configs.imgSrc
-        ? $img.data('cdn') || $img.data('src') || $img.data('original')
-        : $img.attr(configs.imgSrc);
+      images[i] = !configs.imgSrc ? $img.data('src') || $img.data('original') : $img.attr(configs.imgSrc);
     });
 
     checkImages(images);
@@ -905,10 +929,10 @@ jQuery(function ($) {
 
   function cleanSource(response) {
     var responseText = response.responseText;
-    if (configs.imgSrc) return $(responseText);
-
     responseText = responseText.replace(/[\s\n]+src[\s\n]*=[\s\n]*/gi, ' data-src=');
     responseText = responseText.replace(/^[^<]*/, '');
+
+    if (configs.imgSrc) return $(responseText);
     return $(responseText);
   }
 
@@ -1003,7 +1027,7 @@ jQuery(function ($) {
             ')\n{{ chap_id }}: ID chương (' +
             chap_id +
             ')',
-          recentPassword ? recentPassword : '{{ chap_index }}ltn'
+          recentPassword ? recentPassword : '{{ chap_index }}ltn',
         );
 
         if (!pass || !pass.trim()) {
@@ -1145,14 +1169,32 @@ jQuery(function ($) {
 
   function getMangaK() {
     getSource(function ($data) {
-      var $entry = $data.find('#content-chap script');
+      var $entry = $data.find('#content-chap script'),
+        $vungDoc = $data.find('.vung_doc');
+
       if (!$entry.length) {
         notyImages();
       } else {
         $data = $entry.text().match(/var\s+content\s*=\s*(.+?);/)[1];
         $data = $data.trim().replace(/,[\s\n]*\]$/, ']');
         $data = JSON.parse($data);
-        checkImages($data);
+
+        var images = $data.map(function (val, i) {
+          var ext = val.match(/\.\w{3,4}$/);
+          ext = ext ? ext[0].toLowerCase() : '.jpg';
+
+          return (
+            'https://1.truyentranhmanga.com/images/' +
+            $vungDoc.data('manga') +
+            '/' +
+            $vungDoc.data('chapter') +
+            '/' +
+            i +
+            ext
+          );
+        });
+
+        checkImages(images);
       }
     });
   }
@@ -1444,6 +1486,31 @@ jQuery(function ($) {
     var $link = $(configs.link);
     if (!$link.length) return;
 
+    var csrfToken = $('#j-csrf').val();
+    function getAttachmentUrl(arr, output, done) {
+      if (!arr.length) return done();
+
+      $.getJSON(
+        '/get-attachment-url?csrfToken=' +
+          csrfToken +
+          '&url=' +
+          encodeURIComponent(arr.shift()) +
+          '&_' +
+          new Date().getTime(),
+      )
+        .done(function (response) {
+          if (response.status === 'success') {
+            output(response.data.url);
+            getAttachmentUrl(arr, output, done);
+          } else {
+            notyImages();
+          }
+        })
+        .fail(function () {
+          notyError();
+        });
+    }
+
     $link.on('contextmenu', function (e) {
       e.preventDefault();
       hasDownloadError = false;
@@ -1464,7 +1531,28 @@ jQuery(function ($) {
             $entry = $data.find('img');
 
           if (!$entry.length) {
-            notyImages();
+            var $attachment = $(response.response).filter('.load-attachment');
+            if (!$attachment.length) {
+              notyImages();
+              return;
+            }
+
+            $attachment = $attachment
+              .map(function () {
+                return $(this).data('url');
+              })
+              .toArray();
+
+            var images = [];
+            getAttachmentUrl(
+              $attachment,
+              function (img) {
+                images.push(img);
+              },
+              function () {
+                checkImages(images);
+              },
+            );
           } else {
             getImages($entry);
           }
@@ -1497,7 +1585,7 @@ jQuery(function ($) {
               checkImages(
                 res.mes.map(function (img) {
                   return img.url;
-                })
+                }),
               );
             } else {
               notyImages();
@@ -1527,10 +1615,9 @@ jQuery(function ($) {
     notyTimeout,
     domainName = location.host,
     tit = document.title,
-    $win = $(window),
     $doc = $(document),
-    dlZip = new JSZip(),
-    dlPrevZip = false,
+    zipObj = {},
+    recentZip = null,
     dlCurrent = 0,
     dlFinal = 0,
     dlTotal = 0,
@@ -1546,7 +1633,7 @@ jQuery(function ($) {
   GM_registerMenuCommand('Download All To One File', downloadAllOne);
 
   $doc.on('keydown', function (e) {
-    if (e.which === 89 && e.altKey) {
+    if (e.code === 'KeyY' && e.altKey) {
       // Alt+Y
       e.preventDefault();
       e.shiftKey ? downloadAllOne() : downloadAll();
@@ -1554,7 +1641,7 @@ jQuery(function ($) {
   });
 
   GM_addStyle(
-    '#baivong_noty_wrap{display:none;background:#fff;position:fixed;z-index:2147483647;right:20px;top:20px;min-width:150px;max-width:100%;padding:15px 25px;border:1px solid #ddd;border-radius:2px;box-shadow:0 0 0 1px rgba(0,0,0,.1),0 1px 10px rgba(0,0,0,.35);cursor:pointer}#baivong_noty_content{color:#444}#baivong_noty_content strong{font-weight:700}#baivong_noty_content.baivong_info strong{color:#2196f3}#baivong_noty_content.baivong_success strong{color:#4caf50}#baivong_noty_content.baivong_warning strong{color:#ffc107}#baivong_noty_content.baivong_error strong{color:#f44336}#baivong_noty_content strong.centered{display:block;text-align:center}#baivong_noty_close{position:absolute;right:0;top:0;font-size:18px;color:#ddd;height:20px;width:20px;line-height:20px;text-align:center}#baivong_noty_wrap:hover #baivong_noty_close{color:#333}'
+    '#baivong_noty_wrap{display:none;background:#fff;position:fixed;z-index:2147483647;right:20px;top:20px;min-width:150px;max-width:100%;padding:15px 25px;border:1px solid #ddd;border-radius:2px;box-shadow:0 0 0 1px rgba(0,0,0,.1),0 1px 10px rgba(0,0,0,.35);cursor:pointer}#baivong_noty_content{color:#444}#baivong_noty_content strong{font-weight:700}#baivong_noty_content.baivong_info strong{color:#2196f3}#baivong_noty_content.baivong_success strong{color:#4caf50}#baivong_noty_content.baivong_warning strong{color:#ffc107}#baivong_noty_content.baivong_error strong{color:#f44336}#baivong_noty_content strong.centered{display:block;text-align:center}#baivong_noty_close{position:absolute;right:0;top:0;font-size:18px;color:#ddd;height:20px;width:20px;line-height:20px;text-align:center}#baivong_noty_wrap:hover #baivong_noty_close{color:#333}',
   );
 
   switch (domainName) {
@@ -1590,11 +1677,11 @@ jQuery(function ($) {
     case 'www.truyentranh.net':
       configs = {
         reverse: false,
-        link: '.content a',
+        link: '.chapter-list-item-box a',
         name: function (_this) {
-          return _this.title;
+          return $('h1').text().trim() + ' ' + $(_this).text().trim();
         },
-        contents: '.paddfixboth-mobile',
+        contents: '.manga-reading-box',
       };
       break;
     case 'comicvn.net':
@@ -1604,8 +1691,7 @@ jQuery(function ($) {
         name: function (_this) {
           return $('.detail h4').text().trim() + ' ' + $(_this).find('.titleComic').text().trim();
         },
-        contents: '#lightgallery',
-        imgSrc: 'data-src',
+        contents: '#lightgallery2',
       };
       break;
     case 'hamtruyen.com':
@@ -1643,7 +1729,10 @@ jQuery(function ($) {
         init: getTruyenTranhTuan,
       };
       break;
+    case 'mangak.net':
+    case 'mangak.com':
     case 'mangak.info':
+    case 'truyendep.com':
       configs = {
         link: '.chapter-list a',
         init: getMangaK,
@@ -1691,6 +1780,9 @@ jQuery(function ($) {
     case 'hentailxx.com':
     case 'www.hentailxx.com':
     case 'm.hentailxx.com':
+    case 'lxhentai.com':
+    case 'www.lxhentai.com':
+    case 'm.lxhentai.com':
       configs = {
         link: '#listChuong .col-5 a',
         name: 'h1.title-detail',
@@ -1730,9 +1822,10 @@ jQuery(function ($) {
     case 'www.nettruyen.com':
     case 'nhattruyen.com':
       configs = {
-        link: '#nt_listchapter .row a',
+        link: '#nt_listchapter .chapter a',
         name: '.title-detail',
         contents: '.reading-detail.box_doc',
+        imgSrc: 'data-original',
       };
       break;
     case 'www.hamtruyentranh.net':
@@ -1856,6 +1949,18 @@ jQuery(function ($) {
           return $('h1.name').text().trim() + ' ' + $(_this).find('span:first').text().trim();
         },
         init: getTruyenVn,
+      };
+      break;
+    case 'saytruyen.net':
+    case 'www.saytruyen.net':
+    case 'saytruyen.com':
+    case 'www.saytruyen.com':
+    case 'sayhentai.net':
+    case 'www.sayhentai.net':
+      configs = {
+        link: '#list-chapter a',
+        name: 'h1.title',
+        contents: '#lst_content',
       };
       break;
     default:
